@@ -122,9 +122,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 $mysqli->commit();
-                echo json_encode(['success' => true, 'redirect' => 'questionlist.php?test_id='.$test_id]);
-                break;
+                header('Location: questionlist.php?test_id=' . $test_id);
+                exit;
                 
+                
+            case 'update_test_info':
+                $test_id = (int)$_POST['test_id'];
+                $test_name = trim($mysqli->real_escape_string($_POST['test_name'] ?? ''));
+                $test_description = trim($mysqli->real_escape_string($_POST['test_description'] ?? ''));
+
+                if (empty($test_name)) {
+                    throw new Exception('Название теста не может быть пустым');
+                }
+
+                // Verify test exists
+                $test_exists = $mysqli->query("SELECT id FROM Tests WHERE id = $test_id")->fetch_assoc();
+                if (!$test_exists) {
+                    throw new Exception('Тест не найден');
+                }
+
+                // Update test info
+                if (!$mysqli->query("UPDATE Tests SET name = '$test_name', description = '$test_description' WHERE id = $test_id")) {
+                    throw new Exception($mysqli->error);
+                }
+
+                $mysqli->commit();
+                header('Location: questionlist.php?test_id=' . $test_id);
+                exit;
+
             default:
                 throw new Exception('Неизвестное действие');
         }

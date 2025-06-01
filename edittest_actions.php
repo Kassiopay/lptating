@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit;
     }
 
-    $query = "INSERT INTO Tests (name, description) VALUES ('$name', '$description')";
+    $query = "INSERT INTO Tests (name, description,status) VALUES ('$name', '$description',1)";
     if ($mysqli->query($query)) {
         $_SESSION['success'] = 'Тест успешно добавлен';
     } else {

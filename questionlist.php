@@ -3,8 +3,10 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 session_start();
 require_once 'db.php';
-
-if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if ((!isset($_SESSION['analyst']) || $_SESSION['analyst'] !== true) && (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true  )) {
     header('Location: index.php');
     exit;
 }
@@ -22,9 +24,11 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
 <body>
 <header class="testlist-header">
         <div class="header-testlist">
+            <div class="left-corner">
+            </div>
             <img src="images/logo.png" alt="Логотип ППЗ" class="testlist-logo">
             <div class="header-buttons">
-                <a href="adminpanel.php" class="testlist-exit-btn">НАЗАД</a>
+                <a href="reportwindow.php" class="testlist-exit-btn">НАЗАД</a>
                 <a href="logout.php" class="testlist-exit-btn">ВЫХОД</a>
             </div>
         </div>
@@ -44,20 +48,43 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
         <div class="tests-block">
             <h2>Список вопросов</h2>
             
-            <form method="GET" action="" class="test-select-form">
-                <select name="test_id" id="test-select" class="test-input" onchange="this.form.submit()">
-                    <option value="">Выберите тест</option>
-                    <?php
-                    $tests_result = $mysqli->query("SELECT id, name FROM Tests");
-                    if ($tests_result && $tests_result->num_rows > 0) {
-                        while ($test = $tests_result->fetch_assoc()) {
-                            $selected = isset($_GET['test_id']) && $_GET['test_id'] == $test['id'] ? 'selected' : '';
-                            echo "<option value='{$test['id']}' $selected>{$test['name']}</option>";
+            <?php if (isset($_GET['test_id']) && !empty($_GET['test_id'])): ?>
+                <?php
+                $test_id = (int)$_GET['test_id'];
+                $test_result = $mysqli->query("SELECT name, description FROM Tests WHERE id = $test_id");
+                $test_data = $test_result ? $test_result->fetch_assoc() : null;
+                ?>
+                <?php if ($test_data): ?>
+                    <form method="POST" action="questionlist_activity.php" class="edit-test-form">
+                        <input type="hidden" name="action" value="update_test_info">
+                        <input type="hidden" name="test_id" value="<?= $test_id ?>">
+                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
+
+                        <div class="form-group">
+                            <label for="test_name">Название теста:</label>
+                            <input type="text" id="test_name" name="test_name" value="<?= htmlspecialchars($test_data['name']) ?>" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="test_description">Описание теста:</label>
+                            <textarea id="test_description" name="test_description"><?= htmlspecialchars($test_data['description']) ?></textarea>
+                        </div>
+
+                        <button type="submit" class="submit-button">Сохранить</button>
+                        <button type="button" class="clear-button" onclick="clearTestForm()">Очистить</button>
+                    </form>
+                    <script>
+                        function clearTestForm() {
+                            document.getElementById('test_name').value = '';
+                            document.getElementById('test_description').value = '';
                         }
-                    }
-                    ?>
-                </select>
-            </form>
+                    </script>
+                <?php else: ?>
+                    <p>Тест не найден.</p>
+                <?php endif; ?>
+            <?php else: ?>
+                <p>Тест не выбран.</p>
+            <?php endif; ?>
 
             <?php if (isset($_GET['test_id']) && !empty($_GET['test_id'])): ?>
                 <?php
@@ -75,9 +102,10 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                             </tr>
                         </thead>
                         <tbody>
+                            <?php $counter = 1; ?>
                             <?php while ($question = $questions_result->fetch_assoc()): ?>
                                 <tr class="question-row">
-                                    <td><?= htmlspecialchars($question['id']) ?></td>
+                                    <td><?= $counter ?></td>
                                     <td><?= htmlspecialchars($question['text']) ?></td>
                                     <td>
                                         <button type="button" class="show-answers-button" onclick="toggleAnswers(<?= $question['id'] ?>)">
@@ -114,6 +142,7 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                                         </div>
                                     </td>
                                 </tr>
+                                <?php $counter++; ?>
                             <?php endwhile; ?>
                         </tbody>
                     </table>
@@ -144,7 +173,24 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                         </div>
                         
                         <button type="submit" class="submit-button">Добавить вопрос</button>
+                        <button type="button" class="clear-button" onclick="clearQuestionForm()">Очистить</button>
                     </form>
+                    <script>
+                        function clearQuestionForm() {
+                            document.getElementById('question_text').value = '';
+                            for (let i = 1; i <= 3; i++) {
+                                const answerInput = document.querySelector(`input[name="answer_${i}"]`);
+                                if (answerInput) {
+                                    answerInput.value = '';
+                                }
+                            }
+                            // Reset the correct answer radio to first option
+                            const firstRadio = document.querySelector('input[name="correct_answer"]');
+                            if (firstRadio) {
+                                firstRadio.checked = true;
+                            }
+                        }
+                    </script>
                 </div>
             <?php endif; ?>
         </div>
@@ -181,9 +227,13 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
             if (answersRow.style.display === 'none') {
                 answersRow.style.display = 'table-row';
                 button.textContent = 'Скрыть ответы';
+                button.classList.add('status-hidden');
+                button.classList.remove('status-visible');
             } else {
                 answersRow.style.display = 'none';
                 button.textContent = 'Показать ответы';
+                button.classList.add('status-visible');
+                button.classList.remove('status-hidden');
             }
         }
 
@@ -200,8 +250,8 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    buttonElement.classList.toggle('status-restore');
-                    buttonElement.textContent = newStatus == 2 ? 'Вернуть' : 'Скрыть';
+                    // Reload the page after successful status toggle
+                    location.reload();
                 } else {
                     alert('Ошибка при изменении статуса: ' + (data.error || ''));
                 }

@@ -2,11 +2,15 @@
 session_start();
 require_once 'db.php';
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 // Проверка авторизации администратора
-if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
+if ((!isset($_SESSION['analyst']) || $_SESSION['analyst'] !== true) && (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true  )) {
     header('Location: index.php');
     exit;
 }
+
 
 // Получение данных из базы
 $users = [];
@@ -15,11 +19,11 @@ $results = [];
 
 try {
     // Получаем активных пользователей (statusID = 1 и roleID = 1)
-    $users_query = $mysqli->query("SELECT id, techID FROM users WHERE statusID = 1 AND roleID = 1");
+    $users_query = $mysqli->query("SELECT id, techID FROM Users WHERE statusID = 1 AND roleID = 1");
     $users = $users_query->fetch_all(MYSQLI_ASSOC);
 
     // Получаем активные тесты (status = 1)
-    $tests_query = $mysqli->query("SELECT id, name FROM tests WHERE status = 1");
+    $tests_query = $mysqli->query("SELECT id, name FROM Tests WHERE status = 1");
     $tests = $tests_query->fetch_all(MYSQLI_ASSOC);
 
     // Получаем результаты тестирования (фильтруем по параметрам если они есть)
@@ -63,13 +67,14 @@ try {
     }
 
     $sql = "SELECT r.id, u.techID, t.name as test_name, r.result, r.date 
-            FROM testresults r
-            JOIN users u ON r.userID = u.id AND u.statusID = 1 AND u.roleID = 1
-            JOIN tests t ON r.testID = t.id";
+            FROM TestResults r
+            JOIN Users u ON r.userID = u.id AND u.statusID = 1 AND u.roleID = 1
+            JOIN Tests t ON r.testID = t.id";
             
     if (!empty($where)) {
         $sql .= " WHERE " . implode(' AND ', $where);
     }
+    $sql .= " ORDER BY r.id ASC";
 
     $stmt = $mysqli->prepare($sql);
     if (!empty($params)) {
@@ -81,74 +86,73 @@ try {
     $_SESSION['error'] = "Ошибка получения данных: " . $e->getMessage();
 }
 
-    // Function to transliterate Russian characters to English
-    function transliterate($text) {
-        $transliteration = [
-            'А' => 'A', 'Б' => 'B', 'В' => 'V', 'Г' => 'G', 'Д' => 'D',
-            'Е' => 'E', 'Ё' => 'Yo', 'Ж' => 'Zh', 'З' => 'Z', 'И' => 'I',
-            'Й' => 'Y', 'К' => 'K', 'Л' => 'L', 'М' => 'M', 'Н' => 'N',
-            'О' => 'O', 'П' => 'P', 'Р' => 'R', 'С' => 'S', 'Т' => 'T',
-            'У' => 'U', 'Ф' => 'F', 'Х' => 'Kh', 'Ц' => 'Ts', 'Ч' => 'Ch',
-            'Ш' => 'Sh', 'Щ' => 'Shch', 'Ъ' => '', 'Ы' => 'Y', 'Ь' => '',
-            'Э' => 'E', 'Ю' => 'Yu', 'Я' => 'Ya',
-            'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd',
-            'е' => 'e', 'ё' => 'yo', 'ж' => 'zh', 'з' => 'z', 'и' => 'i',
-            'й' => 'y', 'к' => 'k', 'л' => 'l', 'м' => 'm', 'н' => 'n',
-            'о' => 'o', 'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't',
-            'у' => 'u', 'ф' => 'f', 'х' => 'kh', 'ц' => 'ts', 'ч' => 'ch',
-            'ш' => 'sh', 'щ' => 'shch', 'ъ' => '', 'ы' => 'y', 'ь' => '',
-            'э' => 'e', 'ю' => 'yu', 'я' => 'ya'
-        ];
-        return strtr($text, $transliteration);
-    }
     
-    // Обработка экспорта в PDF
-if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
-    require('fpdf.php');
-    
-    class PDF extends FPDF {
-        function __construct() {
-            parent::__construct('P', 'mm', 'A4');
-            // Use FPDF core fonts (Helvetica is Arial equivalent)
-            $this->SetFont('Helvetica', '', 10);
-        }
-        
-        function Header() {
-            $this->SetFont('Helvetica', 'B', 12);
-            $this->Cell(0, 10, 'Test report', 0, 1, 'C');
-            $this->Ln(5);
-        }
-        
-        function Footer() {
-            $this->SetY(-15);
-            $this->SetFont('Helvetica', '', 8);
-            $this->Cell(0, 10, 'Страница '.$this->PageNo().'/{nb}', 0, 0, 'C');
-        }
+
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+if (isset($_GET['export']) && $_GET['export'] === 'excel') {
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+
+    // Set column headers
+    $headers = ['Номер', 'Пользователь', 'Тест', 'Результат', 'Дата'];
+    $col = 'A';
+    foreach ($headers as $header) {
+        $sheet->setCellValue($col . '1', $header);
+        $col++;
     }
 
-    $pdf = new PDF();
-    $pdf->AliasNbPages();
-    $pdf->AddPage();
+    // Make header row bold
+    $sheet->getStyle('A1:E1')->getFont()->setBold(true);
 
-    // Заголовки таблицы
-    $pdf->SetFillColor(200,220,255);
-    $pdf->Cell(15,7,'ID',1,0,'C',true);
-    $pdf->Cell(50,7,'User',1,0,'C',true);
-    $pdf->Cell(60,7,'Test',1,0,'C',true);
-    $pdf->Cell(30,7,'Result',1,0,'C',true);
-    $pdf->Cell(35,7,'Data',1,1,'C',true);
+    // Set width of test_name column (C) to 80
+     $sheet->getColumnDimension('B')->setWidth(20);
+    $sheet->getColumnDimension('C')->setWidth(80);
+    $sheet->getColumnDimension('E')->setWidth(12);
 
-    // Данные таблицы
-    $pdf->SetFillColor(255,255,255);
-    foreach($results as $row) {
-        $pdf->Cell(15,7,$row['id'],1,0,'C');
-        $pdf->Cell(50,7,$row['techID'],1,0,'L');
-        $pdf->Cell(60,7,transliterate($row['test_name']),1,0,'L');
-        $pdf->Cell(30,7,$row['result'],1,0,'C');
-        $pdf->Cell(35,7,$row['date'],1,1,'C');
+    // Fill data rows
+    $rowNum = 2;
+    $counter = 1;
+    foreach ($results as $row) {
+        $sheet->setCellValue('A' . $rowNum, $counter);
+        $sheet->setCellValue('B' . $rowNum, $row['techID']);
+        $sheet->setCellValue('C' . $rowNum, $row['test_name']);
+        $sheet->setCellValue('D' . $rowNum, $row['result']);
+        $sheet->setCellValue('E' . $rowNum, $row['date']);
+        $rowNum++;
+        $counter++;
     }
 
-    $pdf->Output('I', 'report_'.date('Y-m-d').'.pdf');
+    // Apply borders to the entire table including headers
+    $lastRow = $rowNum - 1;
+    $styleArray = [
+        'borders' => [
+            'allBorders' => [
+                'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                'color' => ['argb' => 'FF000000'],
+            ],
+        ],
+    ];
+    $sheet->getStyle('A1:E' . $lastRow)->applyFromArray($styleArray);
+
+    // Center align data in columns A (ID), B (User), and D (Result)
+    $centerAlign = \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER;
+    $sheet->getStyle('A1:A' . $lastRow)->getAlignment()->setHorizontal($centerAlign);
+    $sheet->getStyle('B1:B' . $lastRow)->getAlignment()->setHorizontal($centerAlign);
+    $sheet->getStyle('D1:D' . $lastRow)->getAlignment()->setHorizontal($centerAlign);
+    $sheet->getStyle('C1' . $lastRow)->getAlignment()->setHorizontal($centerAlign);
+    $sheet->getStyle('E1:E' . $lastRow)->getAlignment()->setHorizontal($centerAlign);
+
+    // Set headers for download
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="report_' . date('Y-m-d') . '.xlsx"');
+    header('Cache-Control: max-age=0');
+
+    $writer = new Xlsx($spreadsheet);
+    $writer->save('php://output');
     exit;
 }
 
@@ -168,9 +172,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
 <body>
 <header class="testlist-header">
         <div class="header-testlist">
+            <div class="left-corner">
+            </div>
             <img src="images/logo.png" alt="Логотип ППЗ" class="testlist-logo">
             <div class="header-buttons">
-                <a href="adminpanel.php" class="testlist-exit-btn">НАЗАД</a>
                 <a href="logout.php" class="testlist-exit-btn">ВЫХОД</a>
             </div>
         </div>
@@ -187,7 +192,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
         <div class="tests-block">
             <h2>Фильтры отчетов</h2>
             <form method="get" class="modal-form">
-                <div style="display: flex; justify-content: space-between; gap: 20px; width: 100%;">
+                <div class="filter-group">
                     <div style="flex: 1; min-width: 300px;">
                         <div class="form-group">
                             <label for="user">Пользователь:</label>
@@ -229,15 +234,21 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
 
                 <div class="form-buttons" style="display: flex; gap: 10px;">
                     <button type="submit" class="btn-filter">Применить фильтры</button>
-                    <button type="button" class="btn-filter" onclick="exportToPDF()">Экспорт в PDF</button>
+                    <button type="button" class="btn-filter" onclick="exportToExcel()">Экспорт в Excel</button>
+                <button type="button" class="btn-filter" onclick="window.location.href='statistics.php'">Статистика</button>
+                <button type="button" class="btn-filter" onclick="window.location.href='edittest.php'">Список тестов</button>
+                <button type="button" class="btn-filter" onclick="window.location.href='settingswindow.php'">Настройки тестирования</button>
+                <?php if (isset($_SESSION['admin']) && $_SESSION['admin'] === true): ?>
+                    <button type="button" class="btn-filter" onclick="window.location.href='userlist.php'">Пользователи</button>
+                <?php endif; ?>
                 </div>
 
                 <script>
-                function exportToPDF() {
+                function exportToExcel() {
                     // Сохраняем текущие параметры фильтрации
                     const params = new URLSearchParams(window.location.search);
                     // Добавляем параметр для экспорта
-                    params.set('export', 'pdf');
+                    params.set('export', 'excel');
                     // Отправляем запрос
                     window.location.href = window.location.pathname + '?' + params.toString();
                 }
@@ -258,14 +269,16 @@ if (isset($_GET['export']) && $_GET['export'] === 'pdf') {
                 </thead>
                 <tbody>
                     <?php if (!empty($results)): ?>
+                        <?php $counter = 1; ?>
                         <?php foreach ($results as $row): ?>
                             <tr>
-                                <td><?= htmlspecialchars($row['id']) ?></td>
-                                <td><?= htmlspecialchars($row['techID']) ?></td>
-                                <td><?= htmlspecialchars($row['test_name']) ?></td>
+                                <td><?= $counter ?></td>
+                                <td style="text-align: center;"><?= htmlspecialchars($row['techID']) ?></td>
+                                <td style="text-align: left;"><?= htmlspecialchars($row['test_name']) ?></td>
                                 <td><?= htmlspecialchars($row['result']) ?></td>
                                 <td><?= htmlspecialchars($row['date']) ?></td>
                             </tr>
+                            <?php $counter++; ?>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>

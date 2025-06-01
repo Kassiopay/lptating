@@ -3,7 +3,7 @@ session_start();
 require_once 'db.php';
 
 // Проверка авторизации администратора
-if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
+if ((!isset($_SESSION['analyst']) || $_SESSION['analyst'] !== true) && (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true  )) {
     header('Location: index.php');
     exit;
 }
@@ -26,9 +26,11 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
 <body>
 <header class="testlist-header">
         <div class="header-testlist">
+            <div class="left-corner">
+            </div>
             <img src="images/logo.png" alt="Логотип ППЗ" class="testlist-logo">
             <div class="header-buttons">
-                <a href="adminpanel.php" class="testlist-exit-btn">НАЗАД</a>
+                <a href="reportwindow.php" class="testlist-exit-btn">НАЗАД</a>
                 <a href="logout.php" class="testlist-exit-btn">ВЫХОД</a>
             </div>
         </div>
@@ -67,14 +69,15 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                         </tr>
                     </thead>
                     <tbody>
+                        <?php $counter = 1; ?>
                         <?php while ($row = $result->fetch_assoc()): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($row['id']) ?></td>
+                            <tr onclick="window.location.href='questionlist.php?test_id=<?= $row['id'] ?>'" style="cursor:pointer;">
+                                <td><?= $counter ?></td>
                                 <td><?= htmlspecialchars($row['name']) ?></td>
                                 <td><?= htmlspecialchars($row['description']) ?></td>
                                 <td><?= $row['status'] == 1 ? 'Активен' : 'Скрыт' ?></td>
                                 <td>
-                                    <form method="POST" action="edittest_actions.php" onsubmit="return confirm('Вы уверены, что хотите <?= $row['status'] == 1 ? 'скрыть' : 'вернуть' ?> этот тест?');">
+                                    <form method="POST" action="edittest_actions.php" onsubmit="return confirm('Вы уверены, что хотите <?= $row['status'] == 1 ? 'скрыть' : 'вернуть' ?> этот тест?');" onclick="event.stopPropagation();">
                                         <input type="hidden" name="action" value="toggle_test_status">
                                         <input type="hidden" name="test_id" value="<?= $row['id'] ?>">
                                         <button type="submit"  class="<?= $row['status'] == 1 ? 'delete-button' : 'add-button' ?>">
@@ -83,11 +86,12 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                                     </form>
                                 </td>
                             </tr>
+                            <?php $counter++; ?>
                         <?php endwhile; ?>
                         <tr>
                             <td>Новый</td>
                             <td>
-                                <form method="POST" action="admin_actions.php">
+                                <form method="POST" action="edittest_actions.php">
                                     <input type="hidden" name="action" value="add_test">
                                     <input type="text" name="test_name" placeholder="Название теста" required class="test-input">
                             </td>

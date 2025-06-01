@@ -1,5 +1,8 @@
 <?php
 session_start();
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -23,7 +26,8 @@ session_start();
             <input type="text" placeholder="Логин" required name="loginform" class="input">
             <input type="password" placeholder="Пароль" required name="passwordform" class="input">
             <button type="sumbit" class="btn first" id="enterbtn">Вход</button>
-            <a href="registration.php" class="btn secondary registration-text" id="registrationbtn">Регистрация</a>
+            <!--<a href="registration.php" class="btn secondary registration-text" id="registrationbtn">Регистрация</a>-->
+            <a href="reset_password.php" class="reset-link">Забыли пароль?</a>
         </form>
         <?php
         if (isset($_SESSION['error'])) {

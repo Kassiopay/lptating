@@ -7,6 +7,25 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
     header('Location: index.php');
     exit;
 }
+
+// Получение списка ролей из таблицы Roles
+$roles = [];
+$roles_result = $mysqli->query("SELECT id, name FROM Roles");
+if ($roles_result) {
+    while ($role = $roles_result->fetch_assoc()) {
+        $roles[$role['id']] = $role['name'];
+    }
+}
+
+// Получение выбранного фильтра роли из GET параметров
+$selected_role = isset($_GET['roleID']) ? intval($_GET['roleID']) : 0;
+
+// Формирование запроса пользователей с учетом фильтра роли
+$query = "SELECT id, login, createdata, roleID, statusID, techID FROM Users";
+if ($selected_role > 0) {
+    $query .= " WHERE roleID = " . $selected_role;
+}
+$result = $mysqli->query($query);
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -23,9 +42,11 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
 <body>
 <header class="testlist-header">
         <div class="header-testlist">
+            <div class="left-corner">
+            </div>
             <img src="images/logo.png" alt="Логотип ППЗ" class="testlist-logo">
             <div class="header-buttons">
-                <a href="adminpanel.php" class="testlist-exit-btn">НАЗАД</a>
+                <a href="reportwindow.php" class="testlist-exit-btn">НАЗАД</a>
                 <a href="logout.php" class="testlist-exit-btn">ВЫХОД</a>
             </div>
         </div>
@@ -47,12 +68,23 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
         <?php endif; ?>
 
         <div class="tests-block">
-            <h2>Список пользователей</h2>
-            <?php
-            $query = "SELECT id, login, createdata, roleID, statusID, techID FROM Users";
-            $result = $mysqli->query($query);
-            
-            if ($result && $result->num_rows > 0): ?>
+            <div class="userlist-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1em;">
+                <h2 style="margin: 0;">Список пользователей</h2>
+                <!-- Форма фильтрации по ролям -->
+                <form method="GET" action="userlist.php" class="role-filter-form" style="margin: 0;">
+                    <label for="roleID" style="margin-right: 0.5em;">Фильтр по роли:</label>
+                    <select name="roleID" id="roleID" class="role-input" onchange="this.form.submit()">
+                        <option value="0">Все роли</option>
+                        <?php foreach ($roles as $role_id => $role_name): ?>
+                            <option value="<?= $role_id ?>" <?= $selected_role === $role_id ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($role_name) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+            </div>
+
+            <?php if ($result && $result->num_rows > 0): ?>
                 <table class="tests-table">
                     <thead>
                         <tr>
@@ -61,29 +93,36 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                             <th>Дата создания</th>
                             <th>Роль</th>
                             <th>Статус</th>
-                            <th>Тех. номер</th>
+                            <th>Таб. номер</th>
                             <th>Действия</th>
                         </tr>
                     </thead>
                     <tbody>
+                        <?php $counter = 1; ?>
                         <?php while ($row = $result->fetch_assoc()): ?>
                             <tr>
-                                <td><?= htmlspecialchars($row['id']) ?></td>
-                                <td><?= htmlspecialchars($row['login']) ?></td>
+                                <td><?= $counter ?></td>
+                                <td style="text-align: center;"><?= htmlspecialchars($row['login']) ?></td>
                                 <td><?= htmlspecialchars($row['createdata']) ?></td>
-                                <td><?= $row['roleID'] == 1 ? 'Админ' : 'Пользователь' ?></td>
+                                <td><?= isset($roles[$row['roleID']]) ? htmlspecialchars($roles[$row['roleID']]) : 'Неизвестно' ?></td>
                                 <td><?= $row['statusID'] == 1 ? 'Активен' : 'Скрыт' ?></td>
                                 <td><?= htmlspecialchars($row['techID'] ?? '') ?></td>
-                                <td>
-                                    <form method="POST" action="userlist_action.php" onsubmit="return confirm('Вы уверены, что хотите <?= $row['statusID'] == 1 ? 'скрыть' : 'вернуть' ?> этого пользователя?');">
-                                        <input type="hidden" name="action" value="toggle_user_status">
-                                        <input type="hidden" name="user_id" value="<?= $row['id'] ?>">
-                                        <button type="submit" class="<?= $row['statusID'] == 1 ? 'delete-button' : 'add-button' ?>">
-                                            <?= $row['statusID'] == 1 ? 'Скрыть' : 'Вернуть' ?>
-                                        </button>
-                                    </form>
-                                </td>
+<td>
+    <?php if (isset($roles[$row['roleID']]) && $roles[$row['roleID']] === 'Администратор'): ?>
+        <!-- Статус администратора нельзя менять -->
+        <button type="button" class="disabled-button" disabled>Недоступно</button>
+    <?php else: ?>
+        <form method="POST" action="userlist_action.php" onsubmit="return confirm('Вы уверены, что хотите <?= $row['statusID'] == 1 ? 'скрыть' : 'вернуть' ?> этого пользователя?');">
+            <input type="hidden" name="action" value="toggle_user_status">
+            <input type="hidden" name="user_id" value="<?= $row['id'] ?>">
+            <button type="submit" class="<?= $row['statusID'] == 1 ? 'delete-button' : 'add-button' ?>">
+                <?= $row['statusID'] == 1 ? 'Скрыть' : 'Вернуть' ?>
+            </button>
+        </form>
+    <?php endif; ?>
+</td>
                             </tr>
+                            <?php $counter++; ?>
                         <?php endwhile; ?>
                         <tr>
                             <td>Новый</td>
@@ -97,13 +136,16 @@ if (!isset($_SESSION['admin']) || $_SESSION['admin'] !== true) {
                             </td>
                             <td>
                                 <select name="roleID" class="test-input">
-                                    <option value="1">Админ</option>
-                                    <option value="2" selected>Пользователь</option>
+                                    <?php foreach ($roles as $role_id => $role_name): ?>
+                                        <option value="<?= $role_id ?>" <?= $role_id == 2 ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($role_name) ?>
+                                        </option>
+                                    <?php endforeach; ?>
                                 </select>
                             </td>
                             <td>Активен</td>
                             <td>
-                                <input type="text" name="techID" placeholder="Тех. номер" class="test-input">
+                                <input type="text" name="techID" placeholder="Таб. номер" class="test-input">
                             </td>
                             <td>
                                 <button type="submit" class="add-button">Добавить</button>

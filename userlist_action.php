@@ -13,13 +13,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $login = trim($_POST['login']);
     $password = trim($_POST['password']);
     $roleID = (int)$_POST['roleID'];
-    $techID = (int)$_POST['techID'];
+    $techID = trim($_POST['techID']);
 
     if (empty($login) || empty($password)) {
         $_SESSION['error'] = 'Логин и пароль не могут быть пустыми';
         header('Location: userlist.php');
         exit;
     }
+
+        // Validation
+        if (empty($login)) {
+            $_SESSION['error'] = 'Логин обязателен';
+            header('Location: userlist.php');
+            exit;
+        }
+        if (empty($password)) {
+            $_SESSION['error'] = 'Пароль обязателен';
+            header('Location: userlist.php');
+            exit;
+        }
+        if (strlen($password) < 6) {
+            $_SESSION['error'] = 'Пароль должен содержать минимум 6 символов';
+            header('Location: userlist.php');
+            exit;
+        }
+        if (empty($techID) || !is_numeric($techID)) {
+            $_SESSION['error'] = 'TechID должен быть числом';
+            header('Location: userlist.php');
+            exit;
+        }
+        if ($techID <= 0) {
+            $_SESSION['error'] = 'Таб. номер должен быть положительным 7-ми значным числом';
+            header('Location: userlist.php');
+            exit;
+        }
+        if (strlen((string)$techID) !== 7) {
+            $_SESSION['error'] = 'Таб. номер должен содержать 7 цифр';
+            header('Location: userlist.php');
+            exit;
+        }
+        // Check if techID already exists
+        $stmt = $mysqli->prepare("SELECT id FROM Users WHERE techID = ?");
+        $stmt->bind_param("i", $techID);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows > 0) {
+            $_SESSION['error'] = 'Этот TechID уже используется';
+            header('Location: userlist.php');
+            exit;
+        }
+
+        // Check if login already exists
+        $stmt = $mysqli->prepare("SELECT id FROM Users WHERE login = ?");
+        $stmt->bind_param("s", $login);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows > 0) {
+            $_SESSION['error'] = 'Этот логин уже занят';
+            header('Location: userlist.php');
+            exit;
+        }
+
+    $techID = (int)$techID;
 
     // Проверка существования пользователя
     $check_query = "SELECT id FROM Users WHERE login = ?";

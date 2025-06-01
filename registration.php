@@ -1,5 +1,9 @@
 <?php
 require_once 'db.php';
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 
 $errors = [];
 $success = '';
@@ -17,6 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Validation
         if (empty($login)) {
             $errors[] = 'Логин обязателен';
+        } elseif (strlen($login) < 6) {
+            $errors[] = 'Логин должен содержать минимум 6 символов';
         }
         if (empty($password)) {
             $errors[] = 'Пароль обязателен';
@@ -112,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="post">
-            <input type="number" name="techID" placeholder="Тех. номер (5 цифр)" min="10000" max="99999" class="input" required>
+            <input type="number" name="techID" placeholder="Теб. номер (5 цифр)" min="10000" max="99999" class="input" required>
             <input type="text" name="login" placeholder="Логин" required class="input">
             <input type="password" name="password" placeholder="Пароль" required class="input">
             <input type="password" name="confirm_password" placeholder="Подтвердите пароль" required class="input">
